@@ -82,10 +82,18 @@ def run_sast_scan(repo_path, output_path):
             f'--config={SEMGREP_RULES}',
             '--json',
             f'--output={docker_output_path}',
-            '--metrics=off',
             '--verbose',
             docker_repo_path
         ]
+
+        # If using registry rules, warn and allow metrics
+        if SEMGREP_RULES.startswith("p/") or SEMGREP_RULES.startswith("@"):
+            app.logger.warning("Using registry-based Semgrep rules. Pseudonymous metrics will be sent to semgrep.dev.")
+            semgrep_command_in_docker.insert(3, '--metrics=on')
+        else:
+            semgrep_command_in_docker.insert(3, '--metrics=off')
+
+        # Handle custom config path
         if SEMGREP_CONFIG_PATH:
             app.logger.warning("SEMGREP_CONFIG_PATH is set. Ensure it's correctly accessible within the Dockerized Semgrep environment.")
             semgrep_command_in_docker.insert(1, f'--config={SEMGREP_CONFIG_PATH}')
@@ -116,6 +124,11 @@ def run_sast_scan(repo_path, output_path):
             return False
 
         return True
+
+    except Exception as e:
+        app.logger.error(f"Exception occurred during Semgrep scan: {str(e)}")
+        return False
+
     except FileNotFoundError:
         app.logger.error("Docker command not found. Ensure Docker CLI is installed and accessible.")
         return False
