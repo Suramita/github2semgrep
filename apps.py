@@ -122,7 +122,7 @@ def run_sast_scan(repo_path, output_path):
 # Flask Routes
 @app.route('/', methods=['GET'])
 def hello_world():
-    return "SAST Webhook Listener is running and awaiting webhook events!"
+    return "SAST Webhooks Listener is running and awaiting webhook events!"
 
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
