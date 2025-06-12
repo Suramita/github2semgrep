@@ -43,7 +43,7 @@ validate_env_vars()
 # --- Helper Functions ---
 def verify_webhook_signature(payload_body, secret_token, signature_header):
     if not signature_header:
-        app.logger.warning("No signature header provided. Cannot verify webhook authenticity.")
+        app.logger.warning("No signatursse header provided. Cannot verify webhook authenticity.")
         return False
 
     if signature_header.startswith('sha256='):
@@ -156,9 +156,9 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
         files['file'][1].close()
 
 # Flask Routes
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET','POST'])
 def hello_world():
-    return "SAST Webhook Listener is running asssnd awaiting webhook events!"
+    return "SAST Webhook Listener is running and awaiting webhook events!"
 
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
@@ -214,7 +214,7 @@ def handle_webhook():
         app.logger.error(f"An error occurred: {e}", exc_info=True)
         return jsonify({'status': 'error', 'message': 'An internal error occurred.'}), 500
     finally:
-        app.logger.info(f"Cleaing up tmpossrary diasasdasda asdasdrectory: {temp_dir}")
+        app.logger.info(f"Cleaning up temporary directory: {temp_dir}")
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 if __name__ == '__main__':
