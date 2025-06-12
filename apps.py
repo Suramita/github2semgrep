@@ -126,7 +126,7 @@ def run_sast_scan(repo_path, output_path):
         return True
 
     except Exception as e:
-        app.logger.error(f"Excepion occurred during Semgrep scan: {str(e)}")
+        app.logger.error(f"Exception occurred during Semgrep scan: {str(e)}")
         return False
 
     except FileNotFoundError:
