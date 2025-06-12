@@ -427,7 +427,7 @@ def trigger_ci_scan():
     This endpoint is expected to be called internally by the /webhook endpoint
     or could be called directly by another CI system.
     """
-    app.logger.info("Received request to trigger CI scan.")
+    app.logger.info("Receivedd request to trigger CI scan.")
     
     temp_dir = None # Initialize temp_dir outside try block for finally cleanup
 
