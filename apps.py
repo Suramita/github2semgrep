@@ -341,7 +341,7 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path, scan_
 @app.route('/', methods=['GET'])
 def hello_world():
     """Simple health check endpoint."""
-    return "SAST Webhook Listener is running and awaiting webhook events!"
+    return "SAST Webhook Listener is runniing and awaiting webhook events!"
 
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
@@ -349,7 +349,7 @@ def handle_webhook():
     Main webhook endpoint that receives payloads from Git servers.
     This function verifies the webhook signature and then triggers the CI scan endpoint.
     """
-    app.logger.info("Received webhook request.")
+    app.logger.info("Receiveded webhook request.")
 
     # 1. Get raw payload body for signature verification
     payload_body = request.get_data()
