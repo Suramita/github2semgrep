@@ -23,9 +23,9 @@ DD_PRODUCT_ID = os.getenv('DD_PRODUCT_ID')
 DD_ENGAGEMENT_NAME_PREFIX = os.getenv('DD_ENGAGEMENT_NAME_PREFIX', 'SAST Scan for')
 DD_ENGAGEMENT_LEAD_ID = os.getenv('DD_ENGAGEMENT_LEAD_ID', '1')
 WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'your_super_secret_webhook_key')
-SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/ci')
-SEMGREP_DOCKER_IMAGE = os.getenv('SEMGREP_DOCKER_IMAGE', 'returntocorp/semgrep')
-SEMGREP_APP_TOKEN = os.getenv('SEMGREP_APP_TOKEN', '')
+SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/python,p/javascript,p/go,p/java,p/typescript,p/csharp')
+SEMGREP_CONFIG_PATH = os.getenv('SEMGREP_CONFIG_PATH', '')
+SEMGREP_DOCKER_IMAGE = os.getenv('SEMGREP_DOCKER_IMAGE', 'semgrep/semgrep:latest')
 
 # Validate critical environment variables
 def validate_env_vars():
@@ -43,7 +43,7 @@ validate_env_vars()
 # --- Helper Functions ---
 def verify_webhook_signature(payload_body, secret_token, signature_header):
     if not signature_header:
-        app.logger.warning("No signatursse header provided. Cannot verify webhook authenticity.")
+        app.logger.warning("No signature header provided. Cannot verify webhook authenticity.")
         return False
 
     if signature_header.startswith('sha256='):
@@ -69,7 +69,7 @@ def verify_webhook_signature(payload_body, secret_token, signature_header):
 def run_sast_scan(repo_path, output_path):
     app.logger.info(f"Starting Semgrep scan on {repo_path} using Docker image: {SEMGREP_DOCKER_IMAGE}")
     docker_repo_path = '/src'
-    docker_output_path = '/output/semgrep.json'
+    docker_output_path = '/output/semgrep_results.json'
 
     # Validate SEMGREP_RULES
     if not SEMGREP_RULES or SEMGREP_RULES.strip() == "":
@@ -77,29 +77,27 @@ def run_sast_scan(repo_path, output_path):
         return False
 
     try:
-        # Construct Semgrep command to be run inside the Docker container
         semgrep_command_in_docker = [
             'semgrep',
             f'--config={SEMGREP_RULES}',
-            '--metrics=off',
             '--json',
             f'--output={docker_output_path}',
+            '--metrics=off',
+            '--verbose',
             docker_repo_path
         ]
+        if SEMGREP_CONFIG_PATH:
+            app.logger.warning("SEMGREP_CONFIG_PATH is set. Ensure it's correctly accessible within the Dockerized Semgrep environment.")
+            semgrep_command_in_docker.insert(1, f'--config={SEMGREP_CONFIG_PATH}')
 
-        # Construct the full Docker command
         docker_run_command = [
             'docker', 'run', '--rm',
             '-v', f"{repo_path}:{docker_repo_path}",
             '-v', f"{os.path.dirname(output_path)}:/output",
+            '-e', 'SEMGREP_FEATURES=oss',
+            SEMGREP_DOCKER_IMAGE,
+            *semgrep_command_in_docker
         ]
-
-        # Add Semgrep token if available
-        if SEMGREP_APP_TOKEN:
-            docker_run_command.extend(['-e', f'SEMGREP_APP_TOKEN={SEMGREP_APP_TOKEN}'])
-            app.logger.info("Using SEMGREP_APP_TOKEN for authenticated registry access.")
-
-        docker_run_command.extend([SEMGREP_DOCKER_IMAGE, *semgrep_command_in_docker])
 
         app.logger.debug(f"Docker command: {' '.join(docker_run_command)}")
         result = subprocess.run(docker_run_command, capture_output=True, text=True, check=False)
@@ -156,7 +154,7 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
         files['file'][1].close()
 
 # Flask Routes
-@app.route('/', methods=['GET','POST'])
+@app.route('/', methods=['GET'])
 def hello_world():
     return "SAST Webhook Listener is running and awaiting webhook events!"
 
