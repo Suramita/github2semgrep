@@ -458,7 +458,7 @@ def trigger_ci_scan():
             app.logger.error("Missing repo_url or branch in CI trigger payload.")
             return jsonify({'status': 'error', 'message': 'Missing repository information in payload'}), 400
 
-        app.logger.info(f"Starting CI scan for repo: {repo_url}, branch: {branch}, commit: {commit_hash[:8] if commit_hash else 'N/A'}, pusher: {pusher}")
+        app.logger.info(f"Starting CIs scan for repo: {repo_url}, branch: {branch}, commit: {commit_hash[:8] if commit_hash else 'N/A'}, pusher: {pusher}")
 
         # 2. Create a temporary directory for cloning and scanning
         temp_dir = tempfile.mkdtemp(prefix='sast-scan-')
