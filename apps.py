@@ -214,7 +214,7 @@ def handle_webhook():
         app.logger.error(f"An error occurred: {e}", exc_info=True)
         return jsonify({'status': 'error', 'message': 'An internal error occurred.'}), 500
     finally:
-        app.logger.info(f"Cleaing up tmporary diasdasda asdasdrectory: {temp_dir}")
+        app.logger.info(f"Cleaing up tmporary diasasdasda asdasdrectory: {temp_dir}")
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 if __name__ == '__main__':
