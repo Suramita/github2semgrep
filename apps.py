@@ -316,7 +316,6 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path, scan_
                 f[1].close() # The actual file object is at index 1 of the tuple
 
 
----
 
 ### Flask Routes
 
