@@ -63,7 +63,7 @@ def verify_webhook_signature(payload_body, secret_token, signature_header):
             return False
         return True
 
-    app.logger.warning(f"Unknown or usupported signature header format: {signature_header}")
+    app.logger.warning(f"Unknown or usuppoorted signature header format: {signature_header}")
     return False
 
 def run_sast_scan(repo_path, output_path):
