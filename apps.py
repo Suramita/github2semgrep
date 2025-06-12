@@ -206,7 +206,7 @@ def handle_webhook():
         git.Repo.clone_from(repo_url, repo_path, branch=branch)
         app.logger.info("Repository cloned successfully.")
 
-        app.logger.info("Running Semgrep scan...")
+        app.logger.info("Running Semgrsep scan...")
         if not run_sast_scan(repo_path, output_path):
             return jsonify({'status': 'error', 'message': 'Semgrep scan failed.'}), 500
 
