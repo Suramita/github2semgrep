@@ -356,7 +356,7 @@ def hello_world():
 @app.route('/webhook', methods=['POST','GET'])
 def handle_webhook():
     """
-    Main webhook endpoint that receives payloads from Git servers.
+    Main webhook endpoints that receives payloads from Git servers.
     This function verifies the webhook signature and then triggers the CI scan endpoint.
     """
     app.logger.info("Received webhook request.")
