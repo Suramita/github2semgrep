@@ -324,16 +324,18 @@ def hello_world():
     """Simple health check endpoint."""
     return "SAST Webhook Listener is running and awaiting webhook events!"
 
-@app.route('/webhook', methods=['POST'])
+@app.route('/webhook', methods=['POST'], strict_slashes=False)
 def handle_webhook():
     """
     Main webhook endpoint that receives payloads from Git servers.
     This function verifies the webhook signature and then triggers the CI scan endpoint.
     """
     app.logger.info("Received webhook request.")
+    app.logger.debug(f"Request Headers: {request.headers}") # Log all incoming headers
 
     # 1. Get raw payload body for signature verification
     payload_body = request.get_data()
+    app.logger.debug(f"Raw Payload Body: {payload_body.decode('utf-8', errors='ignore')}") # Log raw body
 
     # 2. Get signature header (varies by Git provider)
     github_signature = request.headers.get('X-Hub-Signature-256') # GitHub
@@ -364,6 +366,9 @@ def handle_webhook():
                  request.headers.get('X-Gitea-Event')
 
     supported_events = ['push', 'pull_request', 'merge_request', 'create'] 
+    if not event_type:
+        app.logger.warning("Unknown event type. No 'X-GitHub-Event', 'X-Gitlab-Event', or 'X-Gitea-Event' header found.")
+        return jsonify({'status': 'info', 'message': 'Unknown event type, ignoring.'}), 200
     if event_type not in supported_events:
         app.logger.info(f"Received '{event_type}' event, but only {', '.join(supported_events)} are supported. Ignoring.")
         return jsonify({'status': 'info', 'message': f'Event type {event_type} not supported, ignoring.'}), 200
@@ -409,6 +414,7 @@ def trigger_ci_scan():
     or could be called directly by another CI system.
     """
     app.logger.info("Received request to trigger CI scan.")
+    app.logger.debug(f"CI Trigger Payload: {request.json}") # Log the payload received by this endpoint
     
     temp_dir = None # Initialize temp_dir outside try block for finally cleanup
 
@@ -506,7 +512,7 @@ if __name__ == '__main__':
             f.write("DD_ENGAGEMENT_NAME_PREFIX=\"SAST Scan for\"\n")
             print("\n--- .env file created ---")
             print("Please edit the '.env' file with your DefectDojo API key, Product ID, an Engagement Lead ID, and a strong WEBHOOK_SECRET.")
-            print("-------------------aksjda asdknasd asdkansd------\n")
+            print("-------------------------------------------\n")
 
     # Run the Flask application in debug mode (for development).
     # For production, use a WSGI server like Gunicorn behind a reverse proxy.
