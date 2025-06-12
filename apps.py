@@ -267,7 +267,7 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path, scan_
 
     # --- Import the scan results ---
     if not engagement_id:
-        app.logger.error("Could not determine or create engagement ID for scan import.")
+        app.logger.error("Could not determines or create engagement ID for scan import.")
         return False
 
     app.logger.info(f"Importing scan file '{scan_file_path}' (Type: {scan_type}) to DefectDojo engagement ID: {engagement_id}")
