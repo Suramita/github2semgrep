@@ -23,9 +23,9 @@ DD_PRODUCT_ID = os.getenv('DD_PRODUCT_ID')
 DD_ENGAGEMENT_NAME_PREFIX = os.getenv('DD_ENGAGEMENT_NAME_PREFIX', 'SAST Scan for')
 DD_ENGAGEMENT_LEAD_ID = os.getenv('DD_ENGAGEMENT_LEAD_ID', '1')
 WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'your_super_secret_webhook_key')
-SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/python,p/javascript,p/go,p/java,p/typescript,p/csharp')
-SEMGREP_CONFIG_PATH = os.getenv('SEMGREP_CONFIG_PATH', '')
-SEMGREP_DOCKER_IMAGE = os.getenv('SEMGREP_DOCKER_IMAGE', 'semgrep/semgrep:latest')
+SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/ci')
+SEMGREP_DOCKER_IMAGE = os.getenv('SEMGREP_DOCKER_IMAGE', 'returntocorp/semgrep')
+SEMGREP_APP_TOKEN = os.getenv('SEMGREP_APP_TOKEN', '')
 
 # Validate critical environment variables
 def validate_env_vars():
@@ -63,70 +63,67 @@ def verify_webhook_signature(payload_body, secret_token, signature_header):
             return False
         return True
 
-    app.logger.warning(f"Unknown or usuppoorted signature header format: {signature_header}")
+    app.logger.warning(f"Unknown or unsupported signature header format: {signature_header}")
     return False
 
 def run_sast_scan(repo_path, output_path):
     app.logger.info(f"Starting Semgrep scan on {repo_path} using Docker image: {SEMGREP_DOCKER_IMAGE}")
     docker_repo_path = '/src'
-    docker_output_path = '/output/semgrep_results.json'
+    docker_output_path = '/output/semgrep.json'
 
     # Validate SEMGREP_RULES
     if not SEMGREP_RULES or SEMGREP_RULES.strip() == "":
         app.logger.error("SEMGREP_RULES is not set or is empty. Please provide valid Semgrep rules.")
         return False
 
-    semgrep_command_in_docker = [
-        'semgrep',
-        f'--config={SEMGREP_RULES}',
-        '--json',
-        f'--output={docker_output_path}',
-        '--metrics=on',
-        '--verbose',
-        docker_repo_path
-    ]
+    try:
+        # Construct Semgrep command to be run inside the Docker container
+        semgrep_command_in_docker = [
+            'semgrep',
+            f'--config={SEMGREP_RULES}',
+            '--metrics=off',
+            '--json',
+            f'--output={docker_output_path}',
+            docker_repo_path
+        ]
 
-    if SEMGREP_CONFIG_PATH:
-        app.logger.warning("SEMGREP_CONFIG_PATH is set. Ensure it's correctly accessible within the Dockerized Semgrep environment.")
-        semgrep_command_in_docker.insert(1, f'--config={SEMGREP_CONFIG_PATH}')
+        # Construct the full Docker command
+        docker_run_command = [
+            'docker', 'run', '--rm',
+            '-v', f"{repo_path}:{docker_repo_path}",
+            '-v', f"{os.path.dirname(output_path)}:/output",
+        ]
 
-    docker_run_command = [
-        'docker', 'run', '--rm',
-        '-v', f"{repo_path}:{docker_repo_path}",
-        '-v', f"{os.path.dirname(output_path)}:/output",
-        '-e', 'SEMGREP_FEATURES=oss'
-    ]
+        # Add Semgrep token if available
+        if SEMGREP_APP_TOKEN:
+            docker_run_command.extend(['-e', f'SEMGREP_APP_TOKEN={SEMGREP_APP_TOKEN}'])
+            app.logger.info("Using SEMGREP_APP_TOKEN for authenticated registry access.")
 
-    # Optional: Add Semgrep token if available
-    SEMGREP_APP_TOKEN = os.getenv("SEMGREP_APP_TOKEN")
-    if SEMGREP_APP_TOKEN:
-        docker_run_command.extend(['-e', f'SEMGREP_APP_TOKEN={SEMGREP_APP_TOKEN}'])
-        app.logger.info("Using SEMGREP_APP_TOKEN for authenticated registry access.")
+        docker_run_command.extend([SEMGREP_DOCKER_IMAGE, *semgrep_command_in_docker])
 
-    docker_run_command.extend([
-        SEMGREP_DOCKER_IMAGE,
-        *semgrep_command_in_docker
-    ])
+        app.logger.debug(f"Docker command: {' '.join(docker_run_command)}")
+        result = subprocess.run(docker_run_command, capture_output=True, text=True, check=False)
 
-    app.logger.debug(f"Docker command: {' '.join(docker_run_command)}")
+        app.logger.info(f"Semgrep scan result: {result}")
+        app.logger.info(f"Semgrep stdout: {result.stdout}")
+        app.logger.info(f"Semgrep stderr: {result.stderr}")
 
-    result = subprocess.run(docker_run_command, capture_output=True, text=True, check=False)
+        if result.returncode == 0:
+            app.logger.info("Semgrep Docker scan completed successfully (no findings or informational exit).")
+        elif result.returncode == 1:
+            app.logger.info("Semgrep Docker scan completed successfully (findings were identified).")
+        else:
+            app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
+            app.logger.error(f"Semgrep stderr: {result.stderr}")
+            return False
 
-    app.logger.info(f"Semgrep scan result: {result}")
-    app.logger.info(f"Semgrep stdout: {result.stdout}")
-    app.logger.info(f"Semgrep stderr: {result.stderr}")
-
-    if result.returncode == 0:
-        app.logger.info("Semgrep Docker scan completed successfully (no findings or informational exit).")
-    elif result.returncode == 1:
-        app.logger.info("Semgrep Docker scan completed successfully (findings were identified).")
-    else:
-        app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
-        app.logger.error(f"Semgrep stderr: {result.stderr}")
+        return True
+    except FileNotFoundError:
+        app.logger.error("Docker command not found. Ensure Docker CLI is installed and accessible.")
         return False
-
-    return True
-
+    except Exception as e:
+        app.logger.error(f"Unexpected error during Semgrep scan: {e}", exc_info=True)
+        return False
 
 def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
     app.logger.info(f"Importing scan results to DefectDojo for product ID {product_id} and engagement '{engagement_name}'")
@@ -217,7 +214,7 @@ def handle_webhook():
         app.logger.error(f"An error occurred: {e}", exc_info=True)
         return jsonify({'status': 'error', 'message': 'An internal error occurred.'}), 500
     finally:
-        app.logger.info(f"Cleaing up temporary directory: {temp_dir}")
+        app.logger.info(f"Cleaning up temporary directory: {temp_dir}")
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 if __name__ == '__main__':
