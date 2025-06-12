@@ -338,12 +338,22 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path, scan_
 
 ### Flask Routes
 
-@app.route('/', methods=['GET','POST'])
+@app.route('/', methods=['POST', 'GET'])
 def hello_world():
-    """Simple health check endpoint."""
+    print("Received a request at the root endpoint.")
+    
+    if request.method == 'POST':
+        print("Headers:", dict(request.headers))
+        print("Raw Body:", request.data.decode('utf-8'))  # raw request body
+        try:
+            json_data = request.get_json()
+            print("Parsed JSON:", json_data)
+        except Exception as e:
+            print("No JSON data or failed to parse JSON:", e)
+
     return "SAST Webhook Listener is running and awaiting webhook events!"
 
-@app.route('/webhook', methods=['POST'])
+@app.route('/webhook', methods=['POST','GET'])
 def handle_webhook():
     """
     Main webhook endpoint that receives payloads from Git servers.
