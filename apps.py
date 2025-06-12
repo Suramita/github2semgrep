@@ -71,6 +71,11 @@ def run_sast_scan(repo_path, output_path):
     docker_repo_path = '/src'
     docker_output_path = '/output/semgrep_results.json'
 
+    # Validate SEMGREP_RULES
+    if not SEMGREP_RULES or SEMGREP_RULES.strip() == "":
+        app.logger.error("SEMGREP_RULES is not set or is empty. Please provide valid Semgrep rules.")
+        return False
+
     try:
         semgrep_command_in_docker = [
             'semgrep',
@@ -107,6 +112,7 @@ def run_sast_scan(repo_path, output_path):
             app.logger.info("Semgrep Docker scan completed successfully (findings were identified).")
         else:
             app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
+            app.logger.error(f"Semgrep stderr: {result.stderr}")
             return False
 
         return True
@@ -206,7 +212,7 @@ def handle_webhook():
         app.logger.error(f"An error occurred: {e}", exc_info=True)
         return jsonify({'status': 'error', 'message': 'An internal error occurred.'}), 500
     finally:
-        app.logger.info(f"Clening up temporary directory: {temp_dir}")
+        app.logger.info(f"Cleaning up temporary directory: {temp_dir}")
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 if __name__ == '__main__':
