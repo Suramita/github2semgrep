@@ -22,7 +22,7 @@ app = Flask(__name__)
 # Do NOT hardcode these values in your script in a production environment.
 
 # DefectDojo API details
-DD_API_URL = os.getenv('DD_API_URL', 'http://localhost:8080/api/v2') # Your DefectDojo API URL (e.g., http://your-dojo-instance/api/v2)
+DD_API_URL = os.getenv('DD_API_URL', 'http://172.18.5.55:8080/api/v2') # Your DefectDojo API URL (e.g., http://your-dojo-instance/api/v2)
 DD_API_KEY = os.getenv('DD_API_KEY') # Your DefectDojo API Key
 DD_PRODUCT_ID = os.getenv('DD_PRODUCT_ID') # The ID of the DefectDojo Product to associate with scans
 DD_ENGAGEMENT_NAME_PREFIX = os.getenv('DD_ENGAGEMENT_NAME_PREFIX', 'SAST Scan for') # Prefix for engagement names
@@ -525,7 +525,7 @@ if __name__ == '__main__':
         with open('.env', 'w') as f:
             f.write("# .env file for SAST Webhook Listener\n")
             f.write("# IMPORTANT: Replace placeholder values with your actual DefectDojo details and a strong secret.\n")
-            f.write("DD_API_URL=\"http://localhost:8080/api/v2\"\n")
+            f.write("DD_API_URL=\"http://172.18.5.55:8080/api/v2\"\n")
             f.write("DD_API_KEY=\"your_defectdojo_api_key_here\"\n")
             f.write("DD_PRODUCT_ID=\"1\" # Replace with your DefectDojo Product ID (e.g., 1, 2, etc.)\n")
             f.write("DD_ENGAGEMENT_LEAD_ID=\"1\" # Replace with a valid User ID in your DefectDojo instance (e.g., 1, 2, etc.)\n")
