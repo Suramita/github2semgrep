@@ -117,6 +117,36 @@ def run_sast_scan(repo_path, output_path):
         app.logger.error(f"Unexpected error during Semgrep scan: {e}", exc_info=True)
         return False
 
+def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
+    app.logger.info(f"Importing scan results to DefectDojo for product ID {product_id} and engagement '{engagement_name}'")
+    headers = {
+        'Authorization': f'Token {DD_API_KEY}',
+        'accept': 'application/json'
+    }
+    files = {
+        'file': (os.path.basename(scan_file_path), open(scan_file_path, 'rb'), 'application/json')
+    }
+    data = {
+        'engagement': engagement_name,
+        'scan_type': 'Semgrep JSON',
+        'active': True,
+        'verified': False,
+        'push_to_jira': False,
+        'close_old_findings': True,
+        'skip_duplicates': True
+    }
+
+    try:
+        response = requests.post(f"{DD_API_URL}/import-scan/", headers=headers, files=files, data=data)
+        app.logger.info(f"DefectDojo response: {response.status_code} - {response.text}")
+        response.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Failed to import scan to DefectDojo: {e}", exc_info=True)
+        return False
+    finally:
+        files['file'][1].close()
+
 # Flask Routes
 @app.route('/', methods=['GET'])
 def hello_world():
@@ -139,14 +169,45 @@ def handle_webhook():
         payload = request.json
         if payload is None:
             raise ValueError("Payload is None, likely not valid JSON or empty body.")
-        app.logger.info(f"Webhooks payload: {json.dumps(payload, indent=2)}")
+        app.logger.info(f"Webhook payload: {json.dumps(payload, indent=2)}")
     except (json.JSONDecodeError, ValueError) as e:
         app.logger.error(f"Failed to parse JSON payload: {e}")
         app.logger.debug(f"Raw payload body: {payload_body.decode('utf-8', errors='ignore')}")
         return jsonify({'status': 'error', 'message': 'Invalid JSON payload'}), 400
 
-    # Additional logic for handling the webhook...
-    return jsonify({'status': 'success', 'message': 'Webhook processed successfully.'}), 200
+    # Extract repository information
+    repo_url = payload.get('repository', {}).get('clone_url')
+    branch = payload.get('ref', '').split('/')[-1]
+    if not repo_url or not branch:
+        app.logger.error("Repository URL or branch not found in payload.")
+        return jsonify({'status': 'error', 'message': 'Repository URL or branch not found in payload.'}), 400
+
+    # Clone repository and run Semgrep scan
+    temp_dir = tempfile.mkdtemp(prefix='sast-scan-')
+    repo_path = os.path.join(temp_dir, 'repo')
+    output_path = os.path.join(temp_dir, 'semgrep_results.json')
+
+    try:
+        app.logger.info(f"Cloning repository {repo_url} into {repo_path}")
+        git.Repo.clone_from(repo_url, repo_path, branch=branch)
+        app.logger.info("Repository cloned successfully.")
+
+        app.logger.info("Running Semgrep scan...")
+        if not run_sast_scan(repo_path, output_path):
+            return jsonify({'status': 'error', 'message': 'Semgrep scan failed.'}), 500
+
+        app.logger.info("Importing scan results to DefectDojo...")
+        if not import_scan_to_defectdojo(DD_PRODUCT_ID, f"{DD_ENGAGEMENT_NAME_PREFIX} {branch}", output_path):
+            return jsonify({'status': 'error', 'message': 'Failed to import scan results to DefectDojo.'}), 500
+
+        app.logger.info("Scan completed and results imported to DefectDojo successfully.")
+        return jsonify({'status': 'success', 'message': 'Scan completed and results imported to DefectDojo.'}), 200
+    except Exception as e:
+        app.logger.error(f"An error occurred: {e}", exc_info=True)
+        return jsonify({'status': 'error', 'message': 'An internal error occurred.'}), 500
+    finally:
+        app.logger.info(f"Cleaning up temporary directory: {temp_dir}")
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
