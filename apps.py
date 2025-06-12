@@ -22,14 +22,14 @@ app = Flask(__name__)
 # Do NOT hardcode these values in your script in a production environment.
 
 # DefectDojo API details
-DD_API_URL = os.getenv('DD_API_URL', 'http://172.18.5.55:8080/api/v2') # Your DefectDojo API URL (e.g., http://your-dojo-instance/api/v2)
+DD_API_URL = os.getenv('DD_API_URL', 'http://localhost:8080/api/v2') # Your DefectDojo API URL (e.g., http://your-dojo-instance/api/v2)
 DD_API_KEY = os.getenv('DD_API_KEY') # Your DefectDojo API Key
 DD_PRODUCT_ID = os.getenv('DD_PRODUCT_ID') # The ID of the DefectDojo Product to associate with scans
 DD_ENGAGEMENT_NAME_PREFIX = os.getenv('DD_ENGAGEMENT_NAME_PREFIX', 'SAST Scan for') # Prefix for engagement names
 DD_ENGAGEMENT_LEAD_ID = os.getenv('DD_ENGAGEMENT_LEAD_ID', '1') # User ID in DefectDojo to assign as engagement lead. Change this to a valid user ID in your DefectDojo instance.
 
 # Webhook secret (for validating GitHub/GitLab webhooks)
-WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', '1qazXSW@3edc') # MUST be kept secret and match your Git webhook configuration
+WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'your_super_secret_webhook_key') # MUST be kept secret and match your Git webhook configuration
 
 # SAST tool configuration (for local Semgrep CLI execution via Docker)
 SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/python,p/javascript,p/go,p/java,p/typescript,p/csharp') # Semgrep rules to run (e.g., 'p/python,p/javascript' or a path to a custom rule file)
@@ -168,6 +168,7 @@ def run_sast_scan(repo_path, output_path):
             '--json',
             f'--output={docker_output_path}',
             '--metrics=off', # Disable metrics for faster execution in CI
+            '--verbose', # Added for more detailed output
             docker_repo_path
         ]
         
@@ -175,9 +176,6 @@ def run_sast_scan(repo_path, output_path):
         # Note: If SEMGREP_CONFIG_PATH is outside repo_path, you'd need another volume mount.
         # Assuming it's inside repo_path or handled by Semgrep's default behavior.
         if SEMGREP_CONFIG_PATH:
-            # For simplicity, assuming SEMGREP_CONFIG_PATH is relative to the cloned repo
-            # or is a globally available rule that Semgrep can fetch.
-            # If it's a specific file, you might need to adjust mounting or copying into the container.
             app.logger.warning("SEMGREP_CONFIG_PATH is set. Ensure it's correctly accessible within the Dockerized Semgrep environment.")
             semgrep_command_in_docker.insert(1, f'--config={SEMGREP_CONFIG_PATH}')
 
@@ -189,6 +187,8 @@ def run_sast_scan(repo_path, output_path):
             'docker', 'run', '--rm',
             '-v', f"{repo_path}:{docker_repo_path}", # Mount the cloned repo
             '-v', f"{os.path.dirname(output_path)}:/output", # Mount the directory for results
+            # Explicitly set SEMGREP_FEATURES=oss for the spawned Semgrep container
+            '-e', 'SEMGREP_FEATURES=oss', 
             SEMGREP_DOCKER_IMAGE,
             *semgrep_command_in_docker # Unpack the Semgrep command arguments
         ]
@@ -335,28 +335,19 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path, scan_
                 f[1].close() # The actual file object is at index 1 of the tuple
 
 
+---
 
 ### Flask Routes
 
-@app.route('/', methods=['POST', 'GET'])
+@app.route('/', methods=['GET'])
 def hello_world():
-    print("Received a request att the root endpoint.")
-    
-    if request.method == 'POST':
-        print("Headers:", dict(request.headers))
-        print("Raw Body:", request.data.decode('utf-8'))  # raw request body
-        try:
-            json_data = request.get_json()
-            print("Parsed JSON:", json_data)
-        except Exception as e:
-            print("No JSON data or failed to parse JSON:", e)
-
+    """Simple health check endpoint."""
     return "SAST Webhook Listener is running and awaiting webhook events!"
 
-@app.route('/webhook', methods=['POST','GET'])
+@app.route('/webhook', methods=['POST'])
 def handle_webhook():
     """
-    Main webhook endpoints that receives payloads from Git servers.
+    Main webhook endpoint that receives payloads from Git servers.
     This function verifies the webhook signature and then triggers the CI scan endpoint.
     """
     app.logger.info("Received webhook request.")
@@ -458,7 +449,7 @@ def trigger_ci_scan():
             app.logger.error("Missing repo_url or branch in CI trigger payload.")
             return jsonify({'status': 'error', 'message': 'Missing repository information in payload'}), 400
 
-        app.logger.info(f"Starting CIs scan for repo: {repo_url}, branch: {branch}, commit: {commit_hash[:8] if commit_hash else 'N/A'}, pusher: {pusher}")
+        app.logger.info(f"Starting CI scan for repo: {repo_url}, branch: {branch}, commit: {commit_hash[:8] if commit_hash else 'N/A'}, pusher: {pusher}")
 
         # 2. Create a temporary directory for cloning and scanning
         temp_dir = tempfile.mkdtemp(prefix='sast-scan-')
@@ -525,7 +516,7 @@ if __name__ == '__main__':
         with open('.env', 'w') as f:
             f.write("# .env file for SAST Webhook Listener\n")
             f.write("# IMPORTANT: Replace placeholder values with your actual DefectDojo details and a strong secret.\n")
-            f.write("DD_API_URL=\"http://172.18.5.55:8080/api/v2\"\n")
+            f.write("DD_API_URL=\"http://localhost:8080/api/v2\"\n")
             f.write("DD_API_KEY=\"your_defectdojo_api_key_here\"\n")
             f.write("DD_PRODUCT_ID=\"1\" # Replace with your DefectDojo Product ID (e.g., 1, 2, etc.)\n")
             f.write("DD_ENGAGEMENT_LEAD_ID=\"1\" # Replace with a valid User ID in your DefectDojo instance (e.g., 1, 2, etc.)\n")
