@@ -408,7 +408,7 @@ def handle_webhook():
         # Send an internal POST request to the CI trigger endpoint.
         # Use 'http://172.18.5.55:5000' as the Flask app listens on this address
         # within the Docker container or local environment.
-        internal_trigger_url = 'http://127.0.0.1:5000/trigger-ci.json' 
+        internal_trigger_url = 'https://4194-102-213-69-182.ngrok-free.app/trigger-ci.json' 
         response = requests.post(internal_trigger_url, json=scan_payload)
         response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
         
