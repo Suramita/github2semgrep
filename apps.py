@@ -73,14 +73,16 @@ def run_sast_scan(repo_path, output_path):
 
     # Validate SEMGREP_RULES
     if not SEMGREP_RULES or SEMGREP_RULES.strip() == "":
-        app.logger.error("SEMGREP_RULES is not set or is empty. Please provide valid Semgrep rules.")
-        return False
+        app.logger.warning("SEMGREP_RULES is not set or is empty. Falling back to default rules: p/ci")
+        semgrep_rules = "p/ci"
+    else:
+        semgrep_rules = SEMGREP_RULES
 
     try:
         # Construct Semgrep command to be run inside the Docker container
         semgrep_command_in_docker = [
             'semgrep',
-            f'--config={SEMGREP_RULES}',
+            f'--config={semgrep_rules}',
             '--metrics=off',
             '--json',
             f'--output={docker_output_path}',
@@ -191,7 +193,7 @@ def handle_webhook():
     repo_url = payload.get('repository', {}).get('clone_url')
     branch = payload.get('ref', '').split('/')[-1]
     if not repo_url or not branch:
-        app.logger.error("Repository URL or branfch not found in payload.")
+        app.logger.error("Repository URL or branch not found in payload.")
         return jsonify({'status': 'error', 'message': 'Repository URL or branch not found in payload.'}), 400
 
     # Clone repository and run Semgrep scan
@@ -212,7 +214,7 @@ def handle_webhook():
         if not import_scan_to_defectdojo(DD_PRODUCT_ID, f"{DD_ENGAGEMENT_NAME_PREFIX} {branch}", output_path):
             return jsonify({'status': 'error', 'message': 'Failed to import scan results to DefectDojo.'}), 500
 
-        app.logger.info("Scann completed and results imported to DefectDojo successfully.")
+        app.logger.info("Scan completed and results imported to DefectDojo successfully.")
         return jsonify({'status': 'success', 'message': 'Scan completed and results imported to DefectDojo.'}), 200
     except Exception as e:
         app.logger.error(f"An error occurred: {e}", exc_info=True)
