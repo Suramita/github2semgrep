@@ -31,9 +31,10 @@ DD_ENGAGEMENT_LEAD_ID = os.getenv('DD_ENGAGEMENT_LEAD_ID', '1') # User ID in Def
 # Webhook secret (for validating GitHub/GitLab webhooks)
 WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'your_super_secret_webhook_key') # MUST be kept secret and match your Git webhook configuration
 
-# SAST tool configuration (for local Semgrep CLI execution)
+# SAST tool configuration (for local Semgrep CLI execution via Docker)
 SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/python,p/javascript,p/go,p/java,p/typescript,p/csharp') # Semgrep rules to run (e.g., 'p/python,p/javascript' or a path to a custom rule file)
 SEMGREP_CONFIG_PATH = os.getenv('SEMGREP_CONFIG_PATH', '') # Optional: Path to a Semgrep config file (e.g., './.semgrep/config.yaml')
+SEMGREP_DOCKER_IMAGE = os.getenv('SEMGREP_DOCKER_IMAGE', 'semgrep/semgrep:latest') # Docker image for Semgrep CLI
 
 # Check if essential environment variables are set
 if not DD_API_KEY or not DD_PRODUCT_ID:
@@ -149,57 +150,75 @@ def get_repository_info(event_type, payload):
 
 def run_sast_scan(repo_path, output_path):
     """
-    Runs Semgrep on the cloned repository using the local CLI.
+    Runs Semgrep on the cloned repository using the Docker CLI.
     The results are saved to a specified JSON file.
     """
-    app.logger.info(f"Starting Semgrep scan on {repo_path} with rules: {SEMGREP_RULES}")
+    app.logger.info(f"Starting Semgrep scan on {repo_path} using Docker image: {SEMGREP_DOCKER_IMAGE}")
+    
+    # Define a path inside the Semgrep Docker container where the repository will be mounted
+    docker_repo_path = '/src'
+    # Define a path inside the Semgrep Docker container where the output will be written
+    docker_output_path = '/output/semgrep_results.json'
+
     try:
-        # Construct Semgrep command
-        # It's generally better to use --config for rules files and --metrics=off for CI
-        semgrep_command = [
+        # Construct Semgrep command to be run inside the Docker container
+        semgrep_command_in_docker = [
             'semgrep',
             f'--config={SEMGREP_RULES}', # Use --config for multiple rules or a rule file path
             '--json',
-            f'--output={output_path}',
+            f'--output={docker_output_path}',
             '--metrics=off', # Disable metrics for faster execution in CI
-            repo_path
+            docker_repo_path
         ]
         
         # Add optional custom config path if specified (e.g., for .semgrep/config.yaml)
-        if SEMGPEP_CONFIG_PATH:
-            # If SEMGREP_RULES already points to a file, this might duplicate,
-            # but Semgrep handles multiple --config flags.
-            semgrep_command.insert(1, f'--config={SEMGREP_CONFIG_PATH}')
+        # Note: If SEMGREP_CONFIG_PATH is outside repo_path, you'd need another volume mount.
+        # Assuming it's inside repo_path or handled by Semgrep's default behavior.
+        if SEMGREP_CONFIG_PATH:
+            # For simplicity, assuming SEMGREP_CONFIG_PATH is relative to the cloned repo
+            # or is a globally available rule that Semgrep can fetch.
+            # If it's a specific file, you might need to adjust mounting or copying into the container.
+            app.logger.warning("SEMGREP_CONFIG_PATH is set. Ensure it's correctly accessible within the Dockerized Semgrep environment.")
+            semgrep_command_in_docker.insert(1, f'--config={SEMGREP_CONFIG_PATH}')
 
-        app.logger.debug(f"Semgrep command: {' '.join(semgrep_command)}")
+        # Construct the full Docker command
+        # We need to mount the cloned repository path and the output file's directory
+        # The output file is created in temp_dir which is on the host filesystem relative to this app.
+        # We also need to mount the Docker socket to allow this container to run another Docker command.
+        docker_run_command = [
+            'docker', 'run', '--rm',
+            '-v', f"{repo_path}:{docker_repo_path}", # Mount the cloned repo
+            '-v', f"{os.path.dirname(output_path)}:/output", # Mount the directory for results
+            SEMGREP_DOCKER_IMAGE,
+            *semgrep_command_in_docker # Unpack the Semgrep command arguments
+        ]
 
-        # Run Semgrep process
-        # `check=False` allows Semgrep to exit with 1 for findings without raising an error,
-        # which is the standard behavior for Semgrep CLI when findings are present.
-        result = subprocess.run(semgrep_command, capture_output=True, text=True, check=False)
+        app.logger.debug(f"Docker command: {' '.join(docker_run_command)}")
+
+        # Run the Docker process
+        # `check=False` allows Semgrep to exit with 1 for findings without raising an error.
+        result = subprocess.run(docker_run_command, capture_output=True, text=True, check=False)
         
-        # Semgrep exits with 0 for no findings, 1 for findings, and >1 for errors.
-        # We consider 0 or 1 as successful scan completion for import.
         if result.returncode == 0:
-            app.logger.info("Semgrep scan completed successfully (no findings or informational exit).")
+            app.logger.info("Semgrep Docker scan completed successfully (no findings or informational exit).")
         elif result.returncode == 1:
-            app.logger.info("Semgrep scan completed successfully (findings were identified).")
+            app.logger.info("Semgrep Docker scan completed successfully (findings were identified).")
         else:
-            app.logger.error(f"Semgrep scan failed with exit code: {result.returncode}")
+            app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
             app.logger.error(f"Semgrep stdout: {result.stdout}")
             app.logger.error(f"Semgrep stderr: {result.stderr}")
             return False
 
         if result.stdout:
-            app.logger.debug(f"Semgrep stdout: {result.stdout}")
+            app.logger.debug(f"Semgrep Docker stdout: {result.stdout}")
         if result.stderr:
-            app.logger.warning(f"Semgrep stderr: {result.stderr}")
+            app.logger.warning(f"Semgrep Docker stderr: {result.stderr}")
         return True
     except FileNotFoundError:
-        app.logger.error("Semgrep command not found. Please ensure Semgrep is installed and in your PATH.")
+        app.logger.error("Docker command not found. Please ensure Docker CLI is installed and in your PATH within this container, and that docker.sock is mounted.")
         return False
     except Exception as e:
-        app.logger.error(f"An unexpected error occurred during Semgrep scan: {e}", exc_info=True)
+        app.logger.error(f"An unexpected error occurred during Dockerized Semgrep scan: {e}", exc_info=True)
         return False
 
 
@@ -267,7 +286,7 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path, scan_
 
     # --- Import the scan results ---
     if not engagement_id:
-        app.logger.error("Could not determines or create engagement ID for scan import.")
+        app.logger.error("Could not determine or create engagement ID for scan import.")
         return False
 
     app.logger.info(f"Importing scan file '{scan_file_path}' (Type: {scan_type}) to DefectDojo engagement ID: {engagement_id}")
@@ -324,18 +343,16 @@ def hello_world():
     """Simple health check endpoint."""
     return "SAST Webhook Listener is running and awaiting webhook events!"
 
-@app.route('/webhook', methods=['POST'], strict_slashes=False)
+@app.route('/webhook', methods=['POST'])
 def handle_webhook():
     """
     Main webhook endpoint that receives payloads from Git servers.
     This function verifies the webhook signature and then triggers the CI scan endpoint.
     """
     app.logger.info("Received webhook request.")
-    app.logger.debug(f"Request Headers: {request.headers}") # Log all incoming headers
 
     # 1. Get raw payload body for signature verification
     payload_body = request.get_data()
-    app.logger.debug(f"Raw Payload Body: {payload_body.decode('utf-8', errors='ignore')}") # Log raw body
 
     # 2. Get signature header (varies by Git provider)
     github_signature = request.headers.get('X-Hub-Signature-256') # GitHub
@@ -366,9 +383,6 @@ def handle_webhook():
                  request.headers.get('X-Gitea-Event')
 
     supported_events = ['push', 'pull_request', 'merge_request', 'create'] 
-    if not event_type:
-        app.logger.warning("Unknown event type. No 'X-GitHub-Event', 'X-Gitlab-Event', or 'X-Gitea-Event' header found.")
-        return jsonify({'status': 'info', 'message': 'Unknown event type, ignoring.'}), 200
     if event_type not in supported_events:
         app.logger.info(f"Received '{event_type}' event, but only {', '.join(supported_events)} are supported. Ignoring.")
         return jsonify({'status': 'info', 'message': f'Event type {event_type} not supported, ignoring.'}), 200
@@ -414,7 +428,6 @@ def trigger_ci_scan():
     or could be called directly by another CI system.
     """
     app.logger.info("Received request to trigger CI scan.")
-    app.logger.debug(f"CI Trigger Payload: {request.json}") # Log the payload received by this endpoint
     
     temp_dir = None # Initialize temp_dir outside try block for finally cleanup
 
@@ -453,7 +466,7 @@ def trigger_ci_scan():
             app.logger.error(f"Git stderr: {e.stderr}")
             return jsonify({'status': 'error', 'message': f'Git clone failed: {e}'}), 500
 
-        # 4. Run SAST scan (local Semgrep CLI)
+        # 4. Run SAST scan (local Semgrep CLI via Docker)
         scan_successful = run_sast_scan(repo_clone_path, scan_output_file)
 
         if not scan_successful:
@@ -509,10 +522,12 @@ if __name__ == '__main__':
             f.write("WEBHOOK_SECRET=\"your_super_secret_webhook_key\"\n")
             f.write("SEMGREP_RULES=\"p/python,p/javascript,p/go,p/java,p/typescript,p/csharp\"\n")
             f.write("SEMGREP_CONFIG_PATH=\"\" # Optional: path to a local Semgrep config file (e.g., ./.semgrep/config.yaml)\n")
+            f.write("SEMGREP_DOCKER_IMAGE=\"semgrep/semgrep:latest\"\n") # Added for Dockerized Semgrep
             f.write("DD_ENGAGEMENT_NAME_PREFIX=\"SAST Scan for\"\n")
             print("\n--- .env file created ---")
             print("Please edit the '.env' file with your DefectDojo API key, Product ID, an Engagement Lead ID, and a strong WEBHOOK_SECRET.")
-            print("-------------------------------------------\n")
+            print("Also, configure the SEMGREP_DOCKER_IMAGE if you need a specific Semgrep Docker image.")
+            print("-------------------------\n")
 
     # Run the Flask application in debug mode (for development).
     # For production, use a WSGI server like Gunicorn behind a reverse proxy.
