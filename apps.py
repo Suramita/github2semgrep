@@ -23,7 +23,7 @@ DD_PRODUCT_ID = os.getenv('DD_PRODUCT_ID')
 DD_ENGAGEMENT_NAME_PREFIX = os.getenv('DD_ENGAGEMENT_NAME_PREFIX', 'SAST Scan for')
 DD_ENGAGEMENT_LEAD_ID = os.getenv('DD_ENGAGEMENT_LEAD_ID', '1')
 WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'your_super_secret_webhook_key')
-SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/ci')
+SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/python,p/javascript')
 SEMGREP_DOCKER_IMAGE = os.getenv('SEMGREP_DOCKER_IMAGE', 'returntocorp/semgrep')
 SEMGREP_APP_TOKEN = os.getenv('SEMGREP_APP_TOKEN', '')
 
@@ -102,12 +102,16 @@ def run_sast_scan(repo_path, output_path):
         docker_run_command.extend([SEMGREP_DOCKER_IMAGE, *semgrep_command_in_docker])
 
         app.logger.debug(f"Docker command: {' '.join(docker_run_command)}")
-        result = subprocess.run(docker_run_command, capture_output=True, text=True, check=False)
 
+        # Run the Docker process and wait for it to complete
+        result = subprocess.run(docker_run_command, capture_output=True, text=True)
+
+        # Log the results
         app.logger.info(f"Semgrep scan result: {result}")
         app.logger.info(f"Semgrep stdout: {result.stdout}")
         app.logger.info(f"Semgrep stderr: {result.stderr}")
 
+        # Check the return code
         if result.returncode == 0:
             app.logger.info("Semgrep Docker scan completed successfully (no findings or informational exit).")
         elif result.returncode == 1:
@@ -156,9 +160,9 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
         files['file'][1].close()
 
 # Flask Routes
-@app.route('/', methods=['GET','POST'])
+@app.route('/', methods=['GET'])
 def hello_world():
-    return "SAST Webhook Listener is runningasd and awaiting webhook events!"
+    return "SAST Webhook Listener is running and awaiting webhook events!"
 
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
@@ -208,7 +212,7 @@ def handle_webhook():
         if not import_scan_to_defectdojo(DD_PRODUCT_ID, f"{DD_ENGAGEMENT_NAME_PREFIX} {branch}", output_path):
             return jsonify({'status': 'error', 'message': 'Failed to import scan results to DefectDojo.'}), 500
 
-        app.logger.info("Scan completessd and results imported to DefectDojo successfully.")
+        app.logger.info("Scan completed and results imported to DefectDojo successfully.")
         return jsonify({'status': 'success', 'message': 'Scan completed and results imported to DefectDojo.'}), 200
     except Exception as e:
         app.logger.error(f"An error occurred: {e}", exc_info=True)
