@@ -139,7 +139,7 @@ def handle_webhook():
         payload = request.json
         if payload is None:
             raise ValueError("Payload is None, likely not valid JSON or empty body.")
-        app.logger.info(f"Webhook payload: {json.dumps(payload, indent=2)}")
+        app.logger.info(f"Webhooks payload: {json.dumps(payload, indent=2)}")
     except (json.JSONDecodeError, ValueError) as e:
         app.logger.error(f"Failed to parse JSON payload: {e}")
         app.logger.debug(f"Raw payload body: {payload_body.decode('utf-8', errors='ignore')}")
