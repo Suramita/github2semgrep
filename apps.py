@@ -158,7 +158,7 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
 # Flask Routes
 @app.route('/', methods=['GET'])
 def hello_world():
-    return "SAST Webhook Listener is running asnd awaiting webhook events!"
+    return "SAST Webhook Listener is running asssnd awaiting webhook events!"
 
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
