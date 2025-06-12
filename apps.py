@@ -97,20 +97,18 @@ def run_sast_scan(repo_path, output_path):
         app.logger.debug(f"Docker command: {' '.join(docker_run_command)}")
         result = subprocess.run(docker_run_command, capture_output=True, text=True, check=False)
 
+        app.logger.info(f"Semgrep scan result: {result}")
+        app.logger.info(f"Semgrep stdout: {result.stdout}")
+        app.logger.info(f"Semgrep stderr: {result.stderr}")
+
         if result.returncode == 0:
             app.logger.info("Semgrep Docker scan completed successfully (no findings or informational exit).")
         elif result.returncode == 1:
             app.logger.info("Semgrep Docker scan completed successfully (findings were identified).")
         else:
             app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
-            app.logger.error(f"Semgrep stdout: {result.stdout}")
-            app.logger.error(f"Semgrep stderr: {result.stderr}")
             return False
 
-        if result.stdout:
-            app.logger.debug(f"Semgrep Docker stdout: {result.stdout}")
-        if result.stderr:
-            app.logger.warning(f"Semgrep Docker stderr: {result.stderr}")
         return True
     except FileNotFoundError:
         app.logger.error("Docker command not found. Ensure Docker CLI is installed and accessible.")
@@ -122,7 +120,7 @@ def run_sast_scan(repo_path, output_path):
 # Flask Routes
 @app.route('/', methods=['GET'])
 def hello_world():
-    return "SAST Webhooks Listener is running and awaiting webhook events!"
+    return "SAST Webhook Listener is running and awaiting webhook events!"
 
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
@@ -141,8 +139,10 @@ def handle_webhook():
         payload = request.json
         if payload is None:
             raise ValueError("Payload is None, likely not valid JSON or empty body.")
+        app.logger.info(f"Webhook payload: {json.dumps(payload, indent=2)}")
     except (json.JSONDecodeError, ValueError) as e:
         app.logger.error(f"Failed to parse JSON payload: {e}")
+        app.logger.debug(f"Raw payload body: {payload_body.decode('utf-8', errors='ignore')}")
         return jsonify({'status': 'error', 'message': 'Invalid JSON payload'}), 400
 
     # Additional logic for handling the webhook...
