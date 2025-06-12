@@ -340,7 +340,7 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path, scan_
 
 @app.route('/', methods=['POST', 'GET'])
 def hello_world():
-    print("Received a request at the root endpoint.")
+    print("Received a request att the root endpoint.")
     
     if request.method == 'POST':
         print("Headers:", dict(request.headers))
