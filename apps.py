@@ -506,7 +506,7 @@ if __name__ == '__main__':
             f.write("DD_ENGAGEMENT_NAME_PREFIX=\"SAST Scan for\"\n")
             print("\n--- .env file created ---")
             print("Please edit the '.env' file with your DefectDojo API key, Product ID, an Engagement Lead ID, and a strong WEBHOOK_SECRET.")
-            print("-------------------------\n")
+            print("-------------------aksjda asdknasd asdkansd------\n")
 
     # Run the Flask application in debug mode (for development).
     # For production, use a WSGI server like Gunicorn behind a reverse proxy.
