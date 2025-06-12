@@ -29,7 +29,7 @@ DD_ENGAGEMENT_NAME_PREFIX = os.getenv('DD_ENGAGEMENT_NAME_PREFIX', 'SAST Scan fo
 DD_ENGAGEMENT_LEAD_ID = os.getenv('DD_ENGAGEMENT_LEAD_ID', '1') # User ID in DefectDojo to assign as engagement lead. Change this to a valid user ID in your DefectDojo instance.
 
 # Webhook secret (for validating GitHub/GitLab webhooks)
-WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'your_super_secret_webhook_key') # MUST be kept secret and match your Git webhook configuration
+WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', '1qazXSW@3edc') # MUST be kept secret and match your Git webhook configuration
 
 # SAST tool configuration (for local Semgrep CLI execution via Docker)
 SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/python,p/javascript,p/go,p/java,p/typescript,p/csharp') # Semgrep rules to run (e.g., 'p/python,p/javascript' or a path to a custom rule file)
@@ -338,7 +338,7 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path, scan_
 
 ### Flask Routes
 
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET','POST'])
 def hello_world():
     """Simple health check endpoint."""
     return "SAST Webhook Listener is running and awaiting webhook events!"
