@@ -76,65 +76,57 @@ def run_sast_scan(repo_path, output_path):
         app.logger.error("SEMGREP_RULES is not set or is empty. Please provide valid Semgrep rules.")
         return False
 
-    try:
-        semgrep_command_in_docker = [
-            'semgrep',
-            f'--config={SEMGREP_RULES}',
-            '--json',
-            f'--output={docker_output_path}',
-            '--verbose',
-            docker_repo_path
-        ]
+    semgrep_command_in_docker = [
+        'semgrep',
+        f'--config={SEMGREP_RULES}',
+        '--json',
+        f'--output={docker_output_path}',
+        '--metrics=on',
+        '--verbose',
+        docker_repo_path
+    ]
 
-        # If using registry rules, warn and allow metrics
-        if SEMGREP_RULES.startswith("p/") or SEMGREP_RULES.startswith("@"):
-            app.logger.warning("Using registry-based Semgrep rules. Pseudonymous metrics will be sent to semgrep.dev.")
-            semgrep_command_in_docker.insert(3, '--metrics=on')
-        else:
-            semgrep_command_in_docker.insert(3, '--metrics=off')
+    if SEMGREP_CONFIG_PATH:
+        app.logger.warning("SEMGREP_CONFIG_PATH is set. Ensure it's correctly accessible within the Dockerized Semgrep environment.")
+        semgrep_command_in_docker.insert(1, f'--config={SEMGREP_CONFIG_PATH}')
 
-        # Handle custom config path
-        if SEMGREP_CONFIG_PATH:
-            app.logger.warning("SEMGREP_CONFIG_PATH is set. Ensure it's correctly accessible within the Dockerized Semgrep environment.")
-            semgrep_command_in_docker.insert(1, f'--config={SEMGREP_CONFIG_PATH}')
+    docker_run_command = [
+        'docker', 'run', '--rm',
+        '-v', f"{repo_path}:{docker_repo_path}",
+        '-v', f"{os.path.dirname(output_path)}:/output",
+        '-e', 'SEMGREP_FEATURES=oss'
+    ]
 
-        docker_run_command = [
-            'docker', 'run', '--rm',
-            '-v', f"{repo_path}:{docker_repo_path}",
-            '-v', f"{os.path.dirname(output_path)}:/output",
-            '-e', 'SEMGREP_FEATURES=oss',
-            SEMGREP_DOCKER_IMAGE,
-            *semgrep_command_in_docker
-        ]
+    # Optional: Add Semgrep token if available
+    SEMGREP_APP_TOKEN = os.getenv("SEMGREP_APP_TOKEN")
+    if SEMGREP_APP_TOKEN:
+        docker_run_command.extend(['-e', f'SEMGREP_APP_TOKEN={SEMGREP_APP_TOKEN}'])
+        app.logger.info("Using SEMGREP_APP_TOKEN for authenticated registry access.")
 
-        app.logger.debug(f"Docker command: {' '.join(docker_run_command)}")
-        result = subprocess.run(docker_run_command, capture_output=True, text=True, check=False)
+    docker_run_command.extend([
+        SEMGREP_DOCKER_IMAGE,
+        *semgrep_command_in_docker
+    ])
 
-        app.logger.info(f"Semgrep scan result: {result}")
-        app.logger.info(f"Semgrep stdout: {result.stdout}")
-        app.logger.info(f"Semgrep stderr: {result.stderr}")
+    app.logger.debug(f"Docker command: {' '.join(docker_run_command)}")
 
-        if result.returncode == 0:
-            app.logger.info("Semgrep Docker scan completed successfully (no findings or informational exit).")
-        elif result.returncode == 1:
-            app.logger.info("Semgrep Docker scan completed successfully (findings were identified).")
-        else:
-            app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
-            app.logger.error(f"Semgrep stderr: {result.stderr}")
-            return False
+    result = subprocess.run(docker_run_command, capture_output=True, text=True, check=False)
 
-        return True
+    app.logger.info(f"Semgrep scan result: {result}")
+    app.logger.info(f"Semgrep stdout: {result.stdout}")
+    app.logger.info(f"Semgrep stderr: {result.stderr}")
 
-    except Exception as e:
-        app.logger.error(f"Exception occurred during Semgrep scan: {str(e)}")
+    if result.returncode == 0:
+        app.logger.info("Semgrep Docker scan completed successfully (no findings or informational exit).")
+    elif result.returncode == 1:
+        app.logger.info("Semgrep Docker scan completed successfully (findings were identified).")
+    else:
+        app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
+        app.logger.error(f"Semgrep stderr: {result.stderr}")
         return False
 
-    except FileNotFoundError:
-        app.logger.error("Docker command not found. Ensure Docker CLI is installed and accessible.")
-        return False
-    except Exception as e:
-        app.logger.error(f"Unexpected error during Semgrep scan: {e}", exc_info=True)
-        return False
+    return True
+
 
 def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
     app.logger.info(f"Importing scan results to DefectDojo for product ID {product_id} and engagement '{engagement_name}'")
