@@ -22,7 +22,7 @@ app = Flask(__name__)
 # Do NOT hardcode these values in your script in a production environment.
 
 # DefectDojo API details
-DD_API_URL = os.getenv('DD_API_URL', 'http://localhost:8080/api/v2') # Your DefectDojo API URL (e.g., http://your-dojo-instance/api/v2)
+DD_API_URL = os.getenv('DD_API_URL', 'http://172.18.5.55:8080/api/v2') # Your DefectDojo API URL (e.g., http://your-dojo-instance/api/v2)
 DD_API_KEY = os.getenv('DD_API_KEY') # Your DefectDojo API Key
 DD_PRODUCT_ID = os.getenv('DD_PRODUCT_ID') # The ID of the DefectDojo Product to associate with scans
 DD_ENGAGEMENT_NAME_PREFIX = os.getenv('DD_ENGAGEMENT_NAME_PREFIX', 'SAST Scan for') # Prefix for engagement names
@@ -36,7 +36,7 @@ SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/python,p/javascript,p/go,p/java,p/
 SEMGREP_CONFIG_PATH = os.getenv('SEMGREP_CONFIG_PATH', '') # Optional: Path to a Semgrep config file (e.g., './.semgrep/config.yaml')
 SEMGREP_DOCKER_IMAGE = os.getenv('SEMGREP_DOCKER_IMAGE', 'semgrep/semgrep:latest') # Docker image for Semgrep CLI
 
-# Check if essential environment variables are set
+# Check if essential environment variables are setl
 if not DD_API_KEY or not DD_PRODUCT_ID:
     app.logger.error("DD_API_KEY or DD_PRODUCT_ID environment variables are not set. Exiting.")
     # In a real application, you might want to raise an exception or exit.
@@ -406,9 +406,9 @@ def handle_webhook():
     
     try:
         # Send an internal POST request to the CI trigger endpoint.
-        # Use 'http://localhost:5000' as the Flask app listens on this address
+        # Use 'http://172.18.5.55:5000' as the Flask app listens on this address
         # within the Docker container or local environment.
-        internal_trigger_url = 'http://localhost:5000/trigger-ci.json' 
+        internal_trigger_url = 'http://127.0.0.1:5000/trigger-ci.json' 
         response = requests.post(internal_trigger_url, json=scan_payload)
         response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
         
@@ -515,7 +515,7 @@ if __name__ == '__main__':
         with open('.env', 'w') as f:
             f.write("# .env file for SAST Webhook Listener\n")
             f.write("# IMPORTANT: Replace placeholder values with your actual DefectDojo details and a strong secret.\n")
-            f.write("DD_API_URL=\"http://localhost:8080/api/v2\"\n")
+            f.write("DD_API_URL=\"http://172.18.5.55:8080/api/v2\"\n")
             f.write("DD_API_KEY=\"your_defectdojo_api_key_here\"\n")
             f.write("DD_PRODUCT_ID=\"1\" # Replace with your DefectDojo Product ID (e.g., 1, 2, etc.)\n")
             f.write("DD_ENGAGEMENT_LEAD_ID=\"1\" # Replace with a valid User ID in your DefectDojo instance (e.g., 1, 2, etc.)\n")
