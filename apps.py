@@ -73,7 +73,7 @@ def run_sast_scan(repo_path, output_path):
 
     # Validate SEMGREP_RULES
     if not SEMGREP_RULES or SEMGREP_RULES.strip() == "":
-        app.logger.warning("SEMGREP_RULES is not set or is empty. Falling back to default rules: p/ci")
+        app.logger.warning("SEMGREP_RULES is not set is empty. Falling back to default rules: p/ci")
         semgrep_rules = "p/ci"
     else:
         semgrep_rules = SEMGREP_RULES
