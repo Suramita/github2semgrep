@@ -285,7 +285,7 @@ def handle_webhook():
         if not import_scan_to_defectdojo(product_id, engagement_id, output_path):
             return jsonify({'status': 'error', 'message': 'Failed to import scan results to DefectDojo.'}), 500
 
-        app.logger.info("Scan completed and results imported to DefectDojo successfully.")
+        app.logger.info("Scan completed and results impoorted to DefectDojo successfully.")
         return jsonify({'status': 'success', 'message': 'Scan completed and results imported to DefectDojo.'}), 200
     except Exception as e:
         app.logger.error(f"An error occurred: {e}", exc_info=True)
