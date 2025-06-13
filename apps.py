@@ -127,7 +127,7 @@ def run_sast_scan(repo_path, output_path):
 
         # Check if the output file exists
         if not os.path.exists(output_path):
-            app.logger.error(f"Semgrep output file {output_path} does not exist. Scan may have failed.")
+            app.logger.error(f"Semgrep outpu file {output_path} does not exist. Scan may have failed.")
             return False
 
         # Parse the output file for errors
