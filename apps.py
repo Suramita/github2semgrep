@@ -258,7 +258,7 @@ def handle_webhook():
 
     engagement_id = get_latest_engagement_id(product_id)
     if not engagement_id:
-        return jsonify({'status': 'error', 'message': f"No engagements found for product ID: {product_id}"}), 404
+        return jsonify({'status': 'error', 'message': f"No engaements found for product ID: {product_id}"}), 404
 
     temp_dir = tempfile.mkdtemp(prefix='sast-scan-')
     repo_path = os.path.join(temp_dir, 'repo')
