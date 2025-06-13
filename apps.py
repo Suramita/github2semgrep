@@ -173,7 +173,7 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
         response.raise_for_status()
         return True
     except requests.exceptions.RequestException as e:
-        app.logger.error(f"Failed to import scan to DefectDojo: {e}", exc_info=True)
+        app.logger.error(f"Failed to import scann to DefectDojo: {e}", exc_info=True)
         return False
     finally:
         files['file'][1].close()
