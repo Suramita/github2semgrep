@@ -35,7 +35,7 @@ def validate_env_vars():
     if not DD_PRODUCT_ID:
         missing_vars.append("DD_PRODUCT_ID")
     if missing_vars:
-        app.logger.error(f"Missing requiredd environment variables: {', '.join(missing_vars)}")
+        app.logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
         raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_vars)}")
 
 validate_env_vars()
@@ -61,7 +61,6 @@ def verify_webhook_signature(payload_body, secret_token, signature_header):
         if not hmac.compare_digest(expected_signature, signature):
             app.logger.error(f"Gitea signature mismatch. Expected: {expected_signature}, Got: {signature}")
             return False
-        return True
 
     app.logger.warning(f"Unknown or unsupported signature header format: {signature_header}")
     return False
@@ -69,7 +68,7 @@ def verify_webhook_signature(payload_body, secret_token, signature_header):
 def run_sast_scan(repo_path, output_path):
     app.logger.info(f"Starting Semgrep scan on {repo_path} using Docker image: {SEMGREP_DOCKER_IMAGE}")
     docker_repo_path = '/src'
-    docker_output_path = '/output/semgrep.json'
+    docker_output_path = '/output/semgrep_results.json'  # Ensure this matches the expected path
 
     # Validate SEMGREP_RULES
     if not SEMGREP_RULES or SEMGREP_RULES.strip() == "":
@@ -117,17 +116,12 @@ def run_sast_scan(repo_path, output_path):
         if result.returncode != 0:
             app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
             app.logger.error(f"Semgrep stderr: {result.stderr}")
-
-            # Parse stderr for specific errors
-            if "HTTP 404" in result.stderr:
-                app.logger.error("Semgrep failed to download configuration. Invalid rules specified.")
-            elif "invalid configuration file" in result.stderr:
-                app.logger.error("Semgrep encountered an invalid configuration file.")
             return False
 
         # Check if the output file exists
         if not os.path.exists(output_path):
-            app.logger.error(f"Semgrep outpu file {output_path} does not exist. Scan may have failed.")
+            app.logger.error(f"Semgrep output file {output_path} does not exist. Scan may have failed.")
+            app.logger.debug(f"Directory contents: {os.listdir(os.path.dirname(output_path))}")
             return False
 
         # Parse the output file for errors
@@ -139,17 +133,13 @@ def run_sast_scan(repo_path, output_path):
 
         return True
     except FileNotFoundError:
-        app.logger.error("Docker comand not found. Ensure Docker CLI is installed and accessible.")
+        app.logger.error("Docker command not found. Ensure Docker CLI is installed and accessible.")
         return False
     except Exception as e:
         app.logger.error(f"Unexpected error during Semgrep scan: {e}", exc_info=True)
         return False
 
 # Flask Routes
-@app.route('/', methods=['GET'])
-def hello_world():
-    return "SAST Webhook Listener is running and awaiting webhook events!"
-
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
     app.logger.info("Received webhook request.")
@@ -177,7 +167,7 @@ def handle_webhook():
     repo_url = payload.get('repository', {}).get('clone_url')
     branch = payload.get('ref', '').split('/')[-1]
     if not repo_url or not branch:
-        app.logger.error("Repository URLs or branch not found in payload.")
+        app.logger.error("Repository URL or branch not found in payload.")
         return jsonify({'status': 'error', 'message': 'Repository URL or branch not found in payload.'}), 400
 
     # Clone repository and run Semgrep scan
