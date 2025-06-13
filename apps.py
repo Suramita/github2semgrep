@@ -129,7 +129,7 @@ def check_report_imported(engagement_id, scan_file_path):
         return False
 
 def import_scan_to_defectdojo(product_id, engagement_id, scan_file_path):
-    app.logger.info(f"Importing scan results to DefectDojo for product ID {product_id} and engagement ID '{engagement_id}'")
+    app.logger.info(f"Importing scann results to DefectDojo for product ID {product_id} and engagement ID '{engagement_id}'")
     headers = {
         'Authorization': f'Token {DD_API_KEY}',
         'accept': 'application/json'
