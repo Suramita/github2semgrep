@@ -137,7 +137,46 @@ def run_sast_scan(repo_path, output_path):
     except Exception as e:
         app.logger.error(f"Unexpected error during Semgrep scan: {e}", exc_info=True)
         return False
+def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
+    """
+    Imports Semgrep scan results into DefectDojo.
 
+    Args:
+        product_id (str): The DefectDojo product ID.
+        engagement_name (str): The name of the engagement in DefectDojo.
+        scan_file_path (str): Path to the Semgrep JSON scan results file.
+
+    Returns:
+        bool: True if the import was successful, False otherwise.
+    """
+    app.logger.info(f"Importing scan results to DefectDojo for product ID {product_id} and engagement '{engagement_name}'")
+    headers = {
+        'Authorization': f'Token {DD_API_KEY}',
+        'accept': 'application/json'
+    }
+    files = {
+        'file': (os.path.basename(scan_file_path), open(scan_file_path, 'rb'), 'application/json')
+    }
+    data = {
+        'engagement': engagement_name,
+        'scan_type': 'Semgrep JSON',
+        'active': True,
+        'verified': False,
+        'push_to_jira': False,
+        'close_old_findings': True,
+        'skip_duplicates': True
+    }
+
+    try:
+        response = requests.post(f"{DD_API_URL}/import-scan/", headers=headers, files=files, data=data)
+        app.logger.info(f"DefectDojo response: {response.status_code} - {response.text}")
+        response.raise_for_status()
+        return True
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Failed to import scan to DefectDojo: {e}", exc_info=True)
+        return False
+    finally:
+        files['file'][1].close()
 # Flask Routes
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
