@@ -139,7 +139,7 @@ def import_scan_to_defectdojo(product_id, engagement_id, scan_file_path):
     }
     data = {
         'engagement': engagement_id,
-        'scan_type': 'Semgrep JSON',
+        'scan_type': 'Semgrep JSON Report',
         'active': True,
         'verified': False,
         'push_to_jira': False,
