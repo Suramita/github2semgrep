@@ -139,7 +139,7 @@ def run_sast_scan(repo_path, output_path):
 
         return True
     except FileNotFoundError:
-        app.logger.error("Docker command not found. Ensure Docker CLI is installed and accessible.")
+        app.logger.error("Docker comand not found. Ensure Docker CLI is installed and accessible.")
         return False
     except Exception as e:
         app.logger.error(f"Unexpected error during Semgrep scan: {e}", exc_info=True)
