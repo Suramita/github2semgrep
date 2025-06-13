@@ -228,7 +228,7 @@ def handle_webhook():
             return jsonify({'status': 'error', 'message': 'Semgrep output file not found.'}), 500
 
         app.logger.info("Importing scan results to DefectDojo...")
-        if not import_scan_to_defectdojo(DD_PRODUCT_ID, f"{DD_ENGAGEMENT_NAME_PREFIX} {branch}", output_path):
+        if not import_scan_to_defectdojo(DD_PRODUCT_ID,DD_ENGAGEMENT_LEAD_ID, output_path):
             return jsonify({'status': 'error', 'message': 'Failed to import scan results to DefectDojo.'}), 500
 
         app.logger.info("Scan completed and results imported to DefectDojo successfully.")
