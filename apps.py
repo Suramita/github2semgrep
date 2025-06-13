@@ -82,7 +82,7 @@ def run_sast_scan(repo_path, output_path):
         # Construct Semgrep command to be run inside the Docker container
         semgrep_command_in_docker = [
             'semgrep',
-            '--metrics=off',
+            '--metrics=on',
             '--json',
             f'--output={docker_output_path}',
             docker_repo_path
