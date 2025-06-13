@@ -250,7 +250,7 @@ def handle_webhook():
     branch = payload.get('ref', '').split('/')[-1]
     if not repo_url or not branch or not repo_name:
         app.logger.error("Repository URL, name, or branch not found in payload.")
-        return jsonify({'status': 'error', 'message': 'Repository URL, name, or brancah not found in payload.'}), 400
+        return jsonify({'status': 'error', 'message': 'Repostory URL, name, or brancah not found in payload.'}), 400
 
     product_id = get_product_id_by_name(repo_name)
     if not product_id:
