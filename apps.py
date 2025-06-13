@@ -73,7 +73,7 @@ def run_sast_scan(repo_path, output_path):
 
     # Validate SEMGREP_RULES
     if not SEMGREP_RULES or SEMGREP_RULES.strip() == "":
-        app.logger.warning("SEMGREP_ULES is not set is empty. Falling back to default rules: p/ci")
+        app.logger.warning("SEMGREP_RULES is not set or is empty. Falling back to default rules: p/ci")
         semgrep_rules = "p/ci"
     else:
         semgrep_rules = SEMGREP_RULES
@@ -82,7 +82,8 @@ def run_sast_scan(repo_path, output_path):
         # Construct Semgrep command to be run inside the Docker container
         semgrep_command_in_docker = [
             'semgrep',
-            '--metrics=on',
+            f'--config={semgrep_rules}',
+            '--metrics=off',
             '--json',
             f'--output={docker_output_path}',
             docker_repo_path
@@ -120,6 +121,11 @@ def run_sast_scan(repo_path, output_path):
         else:
             app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
             app.logger.error(f"Semgrep stderr: {result.stderr}")
+            return False
+
+        # Check if the output file exists
+        if not os.path.exists(output_path):
+            app.logger.error(f"Semgrep output file {output_path} does not exist. Scan may have failed.")
             return False
 
         return True
@@ -205,9 +211,14 @@ def handle_webhook():
         git.Repo.clone_from(repo_url, repo_path, branch=branch)
         app.logger.info("Repository cloned successfully.")
 
-        app.logger.info("Running Semgrsep scan...")
+        app.logger.info("Running Semgrep scan...")
         if not run_sast_scan(repo_path, output_path):
             return jsonify({'status': 'error', 'message': 'Semgrep scan failed.'}), 500
+
+        app.logger.info("Checking Semgrep output file...")
+        if not os.path.exists(output_path):
+            app.logger.error(f"Semgrep output file {output_path} does not exist. Scan may have failed.")
+            return jsonify({'status': 'error', 'message': 'Semgrep output file not found.'}), 500
 
         app.logger.info("Importing scan results to DefectDojo...")
         if not import_scan_to_defectdojo(DD_PRODUCT_ID, f"{DD_ENGAGEMENT_NAME_PREFIX} {branch}", output_path):
