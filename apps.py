@@ -117,6 +117,12 @@ def run_sast_scan(repo_path, output_path):
         if result.returncode != 0:
             app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
             app.logger.error(f"Semgrep stderr: {result.stderr}")
+
+            # Parse stderr for specific errors
+            if "HTTP 404" in result.stderr:
+                app.logger.error("Semgrep failed to download configuration. Invalid rules specified.")
+            elif "invalid configuration file" in result.stderr:
+                app.logger.error("Semgrep encountered an invalid configuration file.")
             return False
 
         # Check if the output file exists
@@ -138,36 +144,6 @@ def run_sast_scan(repo_path, output_path):
     except Exception as e:
         app.logger.error(f"Unexpected error during Semgrep scan: {e}", exc_info=True)
         return False
-
-def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
-    app.logger.info(f"Importing scan results to DefectDojo for product ID {product_id} and engagement '{engagement_name}'")
-    headers = {
-        'Authorization': f'Token {DD_API_KEY}',
-        'accept': 'application/json'
-    }
-    files = {
-        'file': (os.path.basename(scan_file_path), open(scan_file_path, 'rb'), 'application/json')
-    }
-    data = {
-        'engagement': engagement_name,
-        'scan_type': 'Semgrep JSON',
-        'active': True,
-        'verified': False,
-        'push_to_jira': False,
-        'close_old_findings': True,
-        'skip_duplicates': True
-    }
-
-    try:
-        response = requests.post(f"{DD_API_URL}/import-scan/", headers=headers, files=files, data=data)
-        app.logger.info(f"DefectDojo response: {response.status_code} - {response.text}")
-        response.raise_for_status()
-        return True
-    except requests.exceptions.RequestException as e:
-        app.logger.error(f"Failed to import scan to DefectDojo: {e}", exc_info=True)
-        return False
-    finally:
-        files['file'][1].close()
 
 # Flask Routes
 @app.route('/', methods=['GET'])
