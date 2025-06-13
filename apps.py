@@ -35,7 +35,7 @@ def validate_env_vars():
     if not DD_PRODUCT_ID:
         missing_vars.append("DD_PRODUCT_ID")
     if missing_vars:
-        app.logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
+        app.logger.error(f"Missing requiredd environment variables: {', '.join(missing_vars)}")
         raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_vars)}")
 
 validate_env_vars()
