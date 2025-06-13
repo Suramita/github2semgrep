@@ -201,7 +201,7 @@ def handle_webhook():
     repo_url = payload.get('repository', {}).get('clone_url')
     branch = payload.get('ref', '').split('/')[-1]
     if not repo_url or not branch:
-        app.logger.error("Repository URL or branch not found in payload.")
+        app.logger.error("Repository URLs or branch not found in payload.")
         return jsonify({'status': 'error', 'message': 'Repository URL or branch not found in payload.'}), 400
 
     # Clone repository and run Semgrep scan
