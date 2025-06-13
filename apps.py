@@ -65,91 +65,71 @@ def verify_webhook_signature(payload_body, secret_token, signature_header):
     app.logger.warning(f"Unknown or unsupported signature header format: {signature_header}")
     return False
 
-def run_sast_scan(repo_path, output_path):
-    app.logger.info(f"Starting Semgrep scan on {repo_path} using Docker image: {SEMGREP_DOCKER_IMAGE}")
-    docker_repo_path = '/src'
-    docker_output_path = '/output/semgrep_results.json'
-
-    # Validate SEMGREP_RULES
-    if not SEMGREP_RULES or SEMGREP_RULES.strip() == "":
-        app.logger.warning("SEMGREP_RULES is not set or is empty. Falling back to default rules: p/ci")
-        semgrep_rules = "p/ci"
-    else:
-        semgrep_rules = SEMGREP_RULES
-
+def get_product_id_by_name(product_name):
+    app.logger.info(f"Fetching product ID for product name: {product_name}")
+    headers = {
+        'Authorization': f'Token {DD_API_KEY}',
+        'accept': 'application/json'
+    }
     try:
-        # Construct Semgrep command to be run inside the Docker container
-        semgrep_command_in_docker = [
-            'semgrep',
-            f'--config={semgrep_rules}',
-            '--metrics=off',
-            '--json',
-            f'--output={docker_output_path}',
-            docker_repo_path
-        ]
+        response = requests.get(f"{DD_API_URL}/products/", headers=headers)
+        response.raise_for_status()
+        products = response.json().get('results', [])
+        for product in products:
+            if product['name'] == product_name:
+                app.logger.info(f"Matched product name '{product_name}' with product ID {product['id']}")
+                return product['id']
+        app.logger.warning(f"No matching product found for name: {product_name}")
+        return None
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Failed to fetch products from DefectDojo: {e}", exc_info=True)
+        return None
 
-        # Construct the full Docker command
-        docker_run_command = [
-            'docker', 'run', '--rm',
-            '-v', f"{repo_path}:{docker_repo_path}",
-            '-v', f"{os.path.dirname(output_path)}:/output",
-        ]
+def get_latest_engagement_id(product_id):
+    app.logger.info(f"Fetching latest engagement ID for product ID: {product_id}")
+    headers = {
+        'Authorization': f'Token {DD_API_KEY}',
+        'accept': 'application/json'
+    }
+    try:
+        response = requests.get(f"{DD_API_URL}/engagements/", headers=headers, params={'product': product_id})
+        response.raise_for_status()
+        engagements = response.json().get('results', [])
+        if engagements:
+            latest_engagement = max(engagements, key=lambda e: e['id'])
+            app.logger.info(f"Latest engagement ID for product ID {product_id} is {latest_engagement['id']}")
+            return latest_engagement['id']
+        app.logger.warning(f"No engagements found for product ID: {product_id}")
+        return None
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Failed to fetch engagements from DefectDojo: {e}", exc_info=True)
+        return None
 
-        # Add Semgrep token if available
-        if SEMGREP_APP_TOKEN:
-            docker_run_command.extend(['-e', f'SEMGREP_APP_TOKEN={SEMGREP_APP_TOKEN}'])
-            app.logger.info("Using SEMGREP_APP_TOKEN for authenticated registry access.")
-
-        docker_run_command.extend([SEMGREP_DOCKER_IMAGE, *semgrep_command_in_docker])
-
-        app.logger.debug(f"Docker command: {' '.join(docker_run_command)}")
-
-        # Run the Docker process and wait for it to complete
-        result = subprocess.run(docker_run_command, capture_output=True, text=True)
-
-        # Log the results
-        app.logger.info(f"Semgrep scan result: {result}")
-        app.logger.info(f"Semgrep stdout: {result.stdout}")
-        app.logger.info(f"Semgrep stderr: {result.stderr}")
-
-        # Check the return code
-        if result.returncode != 0:
-            app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
-            app.logger.error(f"Semgrep stderr: {result.stderr}")
-            return False
-
-        # Check if the output file exists
-        if not os.path.exists(output_path):
-            app.logger.error(f"Semgrep output file {output_path} does not exist. Scan may have failed.")
-            return False
-
-        # Parse the output file for errors
-        with open(output_path, 'r') as f:
-            semgrep_results = json.load(f)
-            if 'errors' in semgrep_results and semgrep_results['errors']:
-                app.logger.error(f"Semgrep errors: {semgrep_results['errors']}")
-                return False
-
-        return True
-    except FileNotFoundError:
-        app.logger.error("Docker command not found. Ensure Docker CLI is installed and accessible.")
+def check_report_imported(engagement_id, scan_file_path):
+    app.logger.info(f"Checking if report has been imported for engagement ID: {engagement_id}")
+    headers = {
+        'Authorization': f'Token {DD_API_KEY}',
+        'accept': 'application/json'
+    }
+    try:
+        response = requests.get(f"{DD_API_URL}/findings/", headers=headers, params={'engagement': engagement_id})
+        response.raise_for_status()
+        findings = response.json().get('results', [])
+        with open(scan_file_path, 'r') as f:
+            scan_data = json.load(f)
+            scan_version = scan_data.get('version', '')
+        for finding in findings:
+            if finding.get('description', '').find(scan_version) != -1:
+                app.logger.info(f"Report with version '{scan_version}' has already been imported.")
+                return True
+        app.logger.info(f"No matching report found for engagement ID: {engagement_id}")
         return False
-    except Exception as e:
-        app.logger.error(f"Unexpected error during Semgrep scan: {e}", exc_info=True)
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"Failed to fetch findings from DefectDojo: {e}", exc_info=True)
         return False
-def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
-    """
-    Imports Semgrep scan results into DefectDojo.
 
-    Args:
-        product_id (str): The DefectDojo product ID.
-        engagement_name (str): The name of the engagement in DefectDojo.
-        scan_file_path (str): Path to the Semgrep JSON scan results file.
-
-    Returns:
-        bool: True if the import was successful, False otherwise.
-    """
-    app.logger.info(f"Importing scan results to DefectDojo for product ID {product_id} and engagement '{engagement_name}'")
+def import_scan_to_defectdojo(product_id, engagement_id, scan_file_path):
+    app.logger.info(f"Importing scan results to DefectDojo for product ID {product_id} and engagement ID '{engagement_id}'")
     headers = {
         'Authorization': f'Token {DD_API_KEY}',
         'accept': 'application/json'
@@ -158,8 +138,8 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
         'file': (os.path.basename(scan_file_path), open(scan_file_path, 'rb'), 'application/json')
     }
     data = {
-        'engagement': engagement_name,
-        'scan_type': 'Semgrep JSON Report',
+        'engagement': engagement_id,
+        'scan_type': 'Semgrep JSON',
         'active': True,
         'verified': False,
         'push_to_jira': False,
@@ -173,11 +153,75 @@ def import_scan_to_defectdojo(product_id, engagement_name, scan_file_path):
         response.raise_for_status()
         return True
     except requests.exceptions.RequestException as e:
-        app.logger.error(f"Failed to import scann to DefectDojo: {e}", exc_info=True)
+        app.logger.error(f"Failed to import scan to DefectDojo: {e}", exc_info=True)
         return False
     finally:
         files['file'][1].close()
-# Flask Routes
+
+def run_sast_scan(repo_path, output_path):
+    app.logger.info(f"Starting Semgrep scan on {repo_path} using Docker image: {SEMGREP_DOCKER_IMAGE}")
+    docker_repo_path = '/src'
+    docker_output_path = '/output/semgrep_results.json'
+
+    if not SEMGREP_RULES or SEMGREP_RULES.strip() == "":
+        app.logger.warning("SEMGREP_RULES is not set or is empty. Falling back to default rules: p/ci")
+        semgrep_rules = "p/ci"
+    else:
+        semgrep_rules = SEMGREP_RULES
+
+    try:
+        semgrep_command_in_docker = [
+            'semgrep',
+            f'--config={semgrep_rules}',
+            '--metrics=off',
+            '--json',
+            f'--output={docker_output_path}',
+            docker_repo_path
+        ]
+
+        docker_run_command = [
+            'docker', 'run', '--rm',
+            '-v', f"{repo_path}:{docker_repo_path}",
+            '-v', f"{os.path.dirname(output_path)}:/output",
+        ]
+
+        if SEMGREP_APP_TOKEN:
+            docker_run_command.extend(['-e', f'SEMGREP_APP_TOKEN={SEMGREP_APP_TOKEN}'])
+            app.logger.info("Using SEMGREP_APP_TOKEN for authenticated registry access.")
+
+        docker_run_command.extend([SEMGREP_DOCKER_IMAGE, *semgrep_command_in_docker])
+
+        app.logger.debug(f"Docker command: {' '.join(docker_run_command)}")
+
+        result = subprocess.run(docker_run_command, capture_output=True, text=True)
+
+        app.logger.info(f"Semgrep scan result: {result}")
+        app.logger.info(f"Semgrep stdout: {result.stdout}")
+        app.logger.info(f"Semgrep stderr: {result.stderr}")
+
+        if result.returncode != 0:
+            app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
+            app.logger.error(f"Semgrep stderr: {result.stderr}")
+            return False
+
+        if not os.path.exists(output_path):
+            app.logger.error(f"Semgrep output file {output_path} does not exist. Scan may have failed.")
+            return False
+
+        with open(output_path, 'r') as f:
+            semgrep_results = json.load(f)
+            if 'errors' in semgrep_results and semgrep_results['errors']:
+                app.logger.error(f"Semgrep errors: {semgrep_results['errors']}")
+                return False
+
+        return True
+    except FileNotFoundError:
+        app.logger.error("Docker command not found. Ensure Docker CLI is installed and accessible.")
+        return False
+    except Exception as e:
+        app.logger.error(f"Unexpected error during Semgrep scan: {e}", exc_info=True)
+        return False
+
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
     app.logger.info("Received webhook request.")
@@ -201,14 +245,21 @@ def handle_webhook():
         app.logger.debug(f"Raw payload body: {payload_body.decode('utf-8', errors='ignore')}")
         return jsonify({'status': 'error', 'message': 'Invalid JSON payload'}), 400
 
-    # Extract repository information
     repo_url = payload.get('repository', {}).get('clone_url')
+    repo_name = payload.get('repository', {}).get('name')
     branch = payload.get('ref', '').split('/')[-1]
-    if not repo_url or not branch:
-        app.logger.error("Repository URL or branch not found in payload.")
-        return jsonify({'status': 'error', 'message': 'Repository URL or branch not found in payload.'}), 400
+    if not repo_url or not branch or not repo_name:
+        app.logger.error("Repository URL, name, or branch not found in payload.")
+        return jsonify({'status': 'error', 'message': 'Repository URL, name, or branch not found in payload.'}), 400
 
-    # Clone repository and run Semgrep scan
+    product_id = get_product_id_by_name(repo_name)
+    if not product_id:
+        return jsonify({'status': 'error', 'message': f"No matching product found for repository name: {repo_name}"}), 404
+
+    engagement_id = get_latest_engagement_id(product_id)
+    if not engagement_id:
+        return jsonify({'status': 'error', 'message': f"No engagements found for product ID: {product_id}"}), 404
+
     temp_dir = tempfile.mkdtemp(prefix='sast-scan-')
     repo_path = os.path.join(temp_dir, 'repo')
     output_path = os.path.join(temp_dir, 'semgrep_results.json')
@@ -227,8 +278,11 @@ def handle_webhook():
             app.logger.error(f"Semgrep output file {output_path} does not exist. Scan may have failed.")
             return jsonify({'status': 'error', 'message': 'Semgrep output file not found.'}), 500
 
+        if check_report_imported(engagement_id, output_path):
+            return jsonify({'status': 'success', 'message': 'Report has already been imported.'}), 200
+
         app.logger.info("Importing scan results to DefectDojo...")
-        if not import_scan_to_defectdojo(DD_PRODUCT_ID,DD_ENGAGEMENT_LEAD_ID, output_path):
+        if not import_scan_to_defectdojo(product_id, engagement_id, output_path):
             return jsonify({'status': 'error', 'message': 'Failed to import scan results to DefectDojo.'}), 500
 
         app.logger.info("Scan completed and results imported to DefectDojo successfully.")
@@ -237,7 +291,7 @@ def handle_webhook():
         app.logger.error(f"An error occurred: {e}", exc_info=True)
         return jsonify({'status': 'error', 'message': 'An internal error occurred.'}), 500
     finally:
-        app.logger.info(f"Cleaninges up temporary directory: {temp_dir}")
+        app.logger.info(f"Cleaning up temporary directory: {temp_dir}")
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 if __name__ == '__main__':
