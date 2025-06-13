@@ -23,7 +23,7 @@ DD_PRODUCT_ID = os.getenv('DD_PRODUCT_ID')
 DD_ENGAGEMENT_NAME_PREFIX = os.getenv('DD_ENGAGEMENT_NAME_PREFIX', 'SAST Scan for')
 DD_ENGAGEMENT_LEAD_ID = os.getenv('DD_ENGAGEMENT_LEAD_ID', '1')
 WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', 'your_super_secret_webhook_key')
-SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/python,p/javascript')
+SEMGREP_RULES = os.getenv('SEMGREP_RULES', 'p/ci')  # Fallback to p/ci
 SEMGREP_DOCKER_IMAGE = os.getenv('SEMGREP_DOCKER_IMAGE', 'returntocorp/semgrep')
 SEMGREP_APP_TOKEN = os.getenv('SEMGREP_APP_TOKEN', '')
 
@@ -63,7 +63,7 @@ def verify_webhook_signature(payload_body, secret_token, signature_header):
             return False
         return True
 
-    app.logger.warning(f"Unnown or unsupported signature header format: {signature_header}")
+    app.logger.warning(f"Unknown or unsupported signature header format: {signature_header}")
     return False
 
 def run_sast_scan(repo_path, output_path):
@@ -114,11 +114,7 @@ def run_sast_scan(repo_path, output_path):
         app.logger.info(f"Semgrep stderr: {result.stderr}")
 
         # Check the return code
-        if result.returncode == 0:
-            app.logger.info("Semgrep Docker scan completed successfully (no findings or informational exit).")
-        elif result.returncode == 1:
-            app.logger.info("Semgrep Docker scan completed successfully (findings were identified).")
-        else:
+        if result.returncode != 0:
             app.logger.error(f"Semgrep Docker scan failed with exit code: {result.returncode}")
             app.logger.error(f"Semgrep stderr: {result.stderr}")
             return False
@@ -127,6 +123,13 @@ def run_sast_scan(repo_path, output_path):
         if not os.path.exists(output_path):
             app.logger.error(f"Semgrep output file {output_path} does not exist. Scan may have failed.")
             return False
+
+        # Parse the output file for errors
+        with open(output_path, 'r') as f:
+            semgrep_results = json.load(f)
+            if 'errors' in semgrep_results and semgrep_results['errors']:
+                app.logger.error(f"Semgrep errors: {semgrep_results['errors']}")
+                return False
 
         return True
     except FileNotFoundError:
